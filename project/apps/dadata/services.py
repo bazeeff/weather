@@ -1,6 +1,3 @@
-from typing import Dict, List
-
-import httpx
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -9,57 +6,6 @@ from apps.helpers.services import AbstractService
 from apps.weather.models import CityWeather
 from settings import API_SECRET_DADATA, API_TOKEN_DADATA, API_YANDEX_WEATHER_KEY
 import requests
-
-
-class DadataSearchAddressService(AbstractService):
-    """Сервис по поиску адресов в Dadata."""
-
-    headers = {
-        "Content-type": "application/json",
-        "Accept": "application/json",
-        "Authorization": f"Token {API_TOKEN_DADATA}",
-        "X-Secret": API_SECRET_DADATA
-    }
-
-    base_url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address'
-
-    def transform_response(self, response: List[Dict]) -> List[Dict]:
-        print(response)
-        return [
-            {
-                'value': r['value'],
-                'unrestricted_value': r['unrestricted_value'],
-                'city_fias_id': r['data']['city_fias_id'],
-                'settlement_fias_id': r['data']['settlement_fias_id'],
-                'geo_lat': r['data']['geo_lat'],
-                'geo_lon': r['data']['geo_lon'],
-
-            }
-            for r in response
-        ]
-
-    def process(self, query=None) -> List[Dict]:
-        if query:
-            client = httpx.Client(base_url=self.base_url, headers=self.headers)
-            response = client.post(self.base_url, json={
-                "query": f"{query}",
-                "from_bound": {"value": "city"},
-                "to_bound": {"value": "settlement"},
-            })
-            data = response.json()
-            response = data.get("suggestions")
-
-            # https://github.com/hflabs/dadata-py
-
-            # from dadata import Dadata
-            # token = API_TOKEN_DADATA
-            # secret = API_SECRET_DADATA
-            # dadata = Dadata(token, secret)
-            # response = dadata.clean("address", query)
-            if response is None:
-                raise ValidationError("Город не найден")
-            else:
-                return self.transform_response(response)
 
 
 class DadataCoordinatesByAddressService(AbstractService):
@@ -96,7 +42,12 @@ class DadataCoordinatesByAddressService(AbstractService):
     def get_coordinates(self, query_city):
         """Получает координаты города с помощью Dadata API."""
         from dadata import Dadata
-        dadata = Dadata(API_TOKEN_DADATA, API_SECRET_DADATA)
+
+        try:
+            dadata = Dadata(API_TOKEN_DADATA, API_SECRET_DADATA)
+        except Exception as e:
+            raise ValidationError({'error': e})
+
         response = dadata.clean("address", query_city)
 
         return response.get('geo_lat'), response.get('geo_lon')
@@ -117,12 +68,15 @@ class DadataCoordinatesByAddressService(AbstractService):
             }}
         }}
         """
+        try:
+            response = requests.post(
+                'https://api.weather.yandex.ru/graphql/query',
+                headers=headers,
+                json={'query': query}
+            )
+        except Exception as e:
+            raise ValidationError({'error': e})
 
-        response = requests.post(
-            'https://api.weather.yandex.ru/graphql/query',
-            headers=headers,
-            json={'query': query}
-        )
         response_data = response.json()
 
         return {
