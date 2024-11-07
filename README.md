@@ -41,6 +41,7 @@ python manage.py createsuperuser
 
 
 /api/v1/requests_history/ - история запросов к апи погоды
+
 /api/v1/city/ - список городов
 
 телеграмм бот общается с апи из собственного контейнера
